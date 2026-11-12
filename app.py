@@ -29,3 +29,22 @@ def health(): return {"ok":True,"quotes_connected":False,"bot_configured":bool(T
 def quotes(x_telegram_init_data:str=Header(default="")):
     verify(x_telegram_init_data)
     return {"connected":False,"reason":"Verified exchange adapters not configured"}
+
+# Public Rapira SPOT reference only; NOT the RUB→USDT "Exchange" quote.
+@app.get("/api/rapira-spot-reference")
+async def rapira_spot_reference():
+    import httpx
+    from fastapi import HTTPException
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            response=await client.get("https://api.rapira.net/open/market/rates",headers={"Accept":"application/json"})
+            response.raise_for_status()
+            payload=response.json()
+        items=payload.get("data",[]) if isinstance(payload,dict) else payload
+        item=next((x for x in items if x.get("symbol")=="USDT/RUB"),None)
+        if not item: raise ValueError("USDT/RUB unavailable")
+        return {"source":"Rapira public spot API","kind":"spot_reference_only","is_exchange_quote":False,
+                "symbol":"USDT/RUB","bid":item.get("bidPrice"),"ask":item.get("askPrice"),
+                "warning":"Not the RUB→USDT Exchange quote; do not use for spread alerts"}
+    except Exception:
+        raise HTTPException(503,"Rapira public spot rate unavailable")
